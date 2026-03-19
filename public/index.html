@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PteroReseller — Panel Management</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="toast-container"></div>
+
+<div id="app">
+  <!-- LOGIN -->
+  <div id="login-page">
+    <div class="login-container">
+      <div class="login-logo">
+        <div class="big-icon">🦕</div>
+        <h1>Ptero<span>Reseller</span></h1>
+        <p>Panel Management System</p>
+      </div>
+      <div class="tab-group">
+        <button class="tab-btn active" onclick="switchTab('reseller',this)">Reseller</button>
+        <button class="tab-btn" onclick="switchTab('own_reseller',this)">Own Reseller</button>
+        <button class="tab-btn" onclick="switchTab('developer',this)">Developer</button>
+      </div>
+      <div class="card">
+        <h3 id="login-title">🔐 Login sebagai Reseller</h3>
+        <div class="field">
+          <label>Username</label>
+          <input type="text" id="login-user" placeholder="username" />
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="login-pass" placeholder="password"
+            onkeydown="if(event.key==='Enter')doLogin()" />
+        </div>
+        <button class="btn btn-primary btn-full" id="login-btn" onclick="doLogin()">Masuk</button>
+        <p id="login-err" style="display:none;color:var(--red);font-size:12px;margin-top:10px;text-align:center"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard" class="hidden">
+    <header>
+      <div class="logo"><div class="logo-icon">🦕</div>Ptero<span>Reseller</span></div>
+      <div class="header-right">
+        <div class="user-badge">
+          <div class="user-dot"></div>
+          <span id="hdr-user">—</span>
+          <span style="color:var(--text3)">·</span>
+          <span id="hdr-role" style="color:var(--accent);font-size:11px;font-weight:700;text-transform:uppercase"></span>
+        </div>
+        <button class="btn-logout" onclick="doLogout()">Keluar</button>
+      </div>
+    </header>
+    <div class="dashboard-layout">
+      <nav class="sidebar" id="sidebar"></nav>
+      <main class="main-content" id="main-content">
+        <div class="empty-state"><div class="spinner"></div><p>Memuat...</p></div>
+      </main>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL STATS -->
+<div id="stats-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="stats-title">📊 Status Server</h3>
+      <button class="modal-close" onclick="closeModal('stats-modal')">✕</button>
+    </div>
+    <div id="stats-content"></div>
+  </div>
+</div>
+
+<!-- MODAL CONFIRM -->
+<div id="confirm-modal" class="modal-overlay hidden">
+  <div class="modal-box" style="max-width:360px">
+    <div class="modal-header">
+      <h3 id="confirm-title">Konfirmasi</h3>
+      <button class="modal-close" onclick="closeModal('confirm-modal')">✕</button>
+    </div>
+    <p id="confirm-msg" style="font-size:13px;color:var(--text2);margin-bottom:20px"></p>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('confirm-modal')">Batal</button>
+      <button class="btn btn-sm" id="confirm-ok"
+        style="background:var(--red);color:#fff;border:none">Ya, Lanjutkan</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
