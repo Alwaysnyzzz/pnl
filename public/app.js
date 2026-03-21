@@ -304,23 +304,20 @@ async function loadBuatPanelForm(containerId, role, owner) {
     const nests = nestsRes.data || [];
     const locs  = locsRes.data  || [];
 
-    // Build RAM dropdown 1-30 GB
-    const ramOptions = Array.from({length:30},(_,i)=>{
-      const gb = i+1;
-      const mb = gb*1024;
-      const disk = mb; // disk = same as RAM in MB (1024MB per 1GB)
-      const cpu = gb*100;
-      return `<option value="${mb}" data-disk="${disk}" data-cpu="${cpu}">${gb} GB RAM — Disk: ${mb} MB — CPU: ${cpu}%</option>`;
-    }).join('');
+    // Build RAM dropdown 1-30 GB + Unlimited
+    const ramOptions = [
+      ...Array.from({length:30},(_,i)=>{
+        const gb = i+1;
+        const mb = gb*1024;
+        return `<option value="${mb}" data-disk="${mb}" data-cpu="${gb*100}">${gb} GB — ${mb} MB Disk — CPU ${gb*100}%</option>`;
+      }),
+      `<option value="0" data-disk="0" data-cpu="0">♾️ Unlimited</option>`
+    ].join('');
 
     el.innerHTML = `
       <div class="grid-2" style="margin-bottom:12px">
-        <div class="field"><label>Username Panel</label><input type="text" id="fp-user" placeholder="paneluser" oninput="syncPanelName(this.value)" /></div>
+        <div class="field"><label>Username Panel</label><input type="text" id="fp-user" placeholder="paneluser" /></div>
         <div class="field"><label>Password Panel</label><input type="password" id="fp-pass" placeholder="password" /></div>
-      </div>
-      <div class="field" style="margin-bottom:12px">
-        <label>Nama Server <span style="font-size:10px;color:var(--text3)">(otomatis dari username)</span></label>
-        <input type="text" id="fp-name" placeholder="auto dari username" style="opacity:.6;cursor:not-allowed" readonly />
       </div>
       <div class="grid-2" style="margin-bottom:12px">
         <div class="field"><label>Node</label>
@@ -338,15 +335,13 @@ async function loadBuatPanelForm(containerId, role, owner) {
       </div>
       <div class="field" style="margin-bottom:6px">
         <label>Paket RAM</label>
-        <select id="fp-ram" onchange="updateResources(this)">
-          ${ramOptions}
-        </select>
+        <select id="fp-ram" onchange="updateResources(this)">${ramOptions}</select>
       </div>
       <div class="resource-preview" id="res-preview">
-        <span>💾 Disk: <b id="prev-disk">1024 GB</b></span>
+        <span>💾 Disk: <b id="prev-disk">1024 MB</b></span>
         <span>⚙️ CPU: <b id="prev-cpu">100%</b></span>
       </div>
-      <button class="btn btn-primary" id="fp-btn" onclick="doCreatePanel('${role}','${owner}')" style="margin-top:16px">🚀 Buat Panel</button>`;
+      <button class="btn btn-primary btn-full" id="fp-btn" onclick="doCreatePanel('${role}','${owner}')" style="margin-top:16px">🚀 Buat Panel</button>`;
 
     if (nests.length) loadEggs(nests[0].attributes.id);
   } catch(e) {
@@ -354,21 +349,15 @@ async function loadBuatPanelForm(containerId, role, owner) {
   }
 }
 
-// Sync nama server = username panel
-function syncPanelName(val) {
-  const nameEl = document.getElementById('fp-name');
-  if (nameEl) nameEl.value = val;
-}
-
 // Update preview disk & cpu saat RAM berubah
 function updateResources(sel) {
   const opt = sel.selectedOptions[0];
   const diskMb = +opt.dataset.disk;
-  const cpu = opt.dataset.cpu;
+  const cpu = +opt.dataset.cpu;
   const pd = document.getElementById('prev-disk');
   const pc = document.getElementById('prev-cpu');
-  if (pd) pd.textContent = diskMb + ' MB';
-  if (pc) pc.textContent = cpu + '%';
+  if (pd) pd.textContent = diskMb === 0 ? '♾️ Unlimited' : diskMb + ' MB';
+  if (pc) pc.textContent = cpu === 0 ? '♾️ Unlimited' : cpu + '%';
 }
 
 async function loadEggs(nestId) {
@@ -376,13 +365,14 @@ async function loadEggs(nestId) {
   if (!sel) return;
   sel.innerHTML = '<option>Memuat...</option>';
   try {
-    const res = await apiPtero('GET', `nests/${nestId}/eggs`, null, { per_page: 100 });
+    // Fetch eggs WITH variables so we can build environment on create
+    const res = await apiPtero('GET', `nests/${nestId}/eggs`, null, { per_page: 100, include: 'variables' });
     const eggs = res.data || [];
+    // Store egg data globally for use in doCreatePanel
+    window._eggData = {};
+    eggs.forEach(e => { window._eggData[e.attributes.id] = e.attributes; });
     sel.innerHTML = eggs.map(e =>
-      `<option value="${e.attributes.id}"
-        data-docker="${e.attributes.docker_image||''}"
-        data-startup="${(e.attributes.startup||'').replace(/"/g,'&quot;')}"
-      >${e.attributes.name}</option>`
+      `<option value="${e.attributes.id}">${e.attributes.name}</option>`
     ).join('');
   } catch(e) {
     sel.innerHTML = `<option>Error: ${e.message}</option>`;
@@ -409,8 +399,22 @@ async function doCreatePanel(role, owner) {
   btn.innerHTML = '<span class="spinner"></span> Membuat...';
   btn.disabled = true;
 
-  const docker  = eggEl.selectedOptions[0]?.dataset?.docker  || 'ghcr.io/pterodactyl/yolks:java_17';
-  const startup = eggEl.selectedOptions[0]?.dataset?.startup || 'java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}';
+  // Get egg data with variables
+  const eggData = (window._eggData && window._eggData[eggId]) || {};
+  const docker  = eggData.docker_image || 'ghcr.io/pterodactyl/yolks:java_17';
+  const startup = eggData.startup || 'java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}';
+
+  // Build environment from egg variables using their default values
+  const environment = {};
+  const eggVars = eggData.relationships?.variables?.data || [];
+  eggVars.forEach(v => {
+    const attr = v.attributes;
+    environment[attr.env_variable] = attr.default_value || '';
+  });
+  // Fallback common vars if empty
+  if (Object.keys(environment).length === 0) {
+    environment['SERVER_JARFILE'] = 'server.jar';
+  }
 
   try {
     const userRes = await apiPtero('POST','users', {
@@ -422,11 +426,12 @@ async function doCreatePanel(role, owner) {
     const free = (allocRes.data||[]).find(a => !a.attributes.assigned);
     if (!free) throw new Error('Tidak ada port tersedia di node ini!');
 
+    // Unlimited = memory/disk/cpu = 0
     const srvRes = await apiPtero('POST','servers', {
       name, user: userId, egg: eggId,
       docker_image: docker, startup,
-      environment: { SERVER_JARFILE:'server.jar', VANILLA_VERSION:'latest' },
-      limits: { memory: ram, swap: 0, disk, io: 500, cpu },
+      environment,
+      limits: { memory: ram, swap: -1, disk, io: 500, cpu },
       feature_limits: { databases: 5, backups: 2, allocations: 1 },
       allocation: { default: free.attributes.id },
     });
