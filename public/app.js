@@ -1,6 +1,5 @@
 // ================================================================
 // PteroReseller — app.js
-// API calls go to /api/ptero (proxy) and /api/db (GitHub JSON)
 // ================================================================
 
 // ──────────────────────────────────────────────────────────────
@@ -9,15 +8,14 @@
 const SESSION = { role: '', username: '', userData: null };
 let currentTab = 'reseller';
 
-// Local cache of DB (loaded on login)
 let DB = {
   developers:        {},
   data_resseller:    {},
   data_ownresseller: {},
   panel_resseller:   {},
   ownpanel_resseller:{},
+  activity_log:      [],
 };
-// SHA map for GitHub writes
 let SHAS = {};
 
 // ──────────────────────────────────────────────────────────────
@@ -25,10 +23,7 @@ let SHAS = {};
 // ──────────────────────────────────────────────────────────────
 async function apiPtero(method, path, body = null, extraParams = {}) {
   const params = new URLSearchParams({ path, ...extraParams });
-  const opts = {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-  };
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(`/api/ptero?${params}`, opts);
   const data = await res.json().catch(() => ({}));
@@ -52,15 +47,75 @@ async function dbWrite(key, data) {
   });
   const result = await res.json();
   if (!res.ok) throw new Error(result.error || 'DB write failed');
-  // Update SHA after write
-  if (result.result?.content?.sha) SHAS[key] = result.result.content.sha;
+  if (result.sha) SHAS[key] = result.sha;
   DB[key] = data;
   return result;
 }
 
 async function loadAllDB() {
-  const keys = ['developers','data_resseller','data_ownresseller','panel_resseller','ownpanel_resseller'];
+  const keys = ['developers','data_resseller','data_ownresseller','panel_resseller','ownpanel_resseller','activity_log'];
   await Promise.all(keys.map(async k => { DB[k] = await dbRead(k); }));
+}
+
+// ──────────────────────────────────────────────────────────────
+// ACTIVITY LOG
+// ──────────────────────────────────────────────────────────────
+const ACTION_ICONS = {
+  'create_panel':        '🖥️',
+  'delete_panel':        '🗑️',
+  'create_user':         '👤',
+  'delete_user':         '❌',
+  'create_reseller':     '👤',
+  'delete_reseller':     '🗑️',
+  'create_own_reseller': '👑',
+  'delete_own_reseller': '🗑️',
+  'create_developer':    '🛠️',
+  'delete_developer':    '🗑️',
+  'suspend_panel':       '🚫',
+  'unsuspend_panel':     '✅',
+  'login':               '🔑',
+};
+
+const ACTION_LABELS = {
+  'create_panel':        'Buat Panel',
+  'delete_panel':        'Hapus Panel',
+  'create_user':         'Buat User',
+  'delete_user':         'Hapus User',
+  'create_reseller':     'Buat Reseller',
+  'delete_reseller':     'Hapus Reseller',
+  'create_own_reseller': 'Buat Own Reseller',
+  'delete_own_reseller': 'Hapus Own Reseller',
+  'create_developer':    'Buat Developer',
+  'delete_developer':    'Hapus Developer',
+  'suspend_panel':       'Suspend Panel',
+  'unsuspend_panel':     'Unsuspend Panel',
+  'login':               'Login',
+};
+
+async function logActivity(action, detail) {
+  try {
+    const logs = await dbRead('activity_log');
+    const arr = Array.isArray(logs) ? logs : [];
+    arr.unshift({
+      action,
+      detail,
+      actor: SESSION.username,
+      role: SESSION.role,
+      ts: new Date().toISOString(),
+    });
+    // Simpan max 200 log
+    await dbWrite('activity_log', arr.slice(0, 200));
+  } catch(e) {
+    console.warn('Log activity failed:', e.message);
+  }
+}
+
+function fmtTs(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2,'0');
+  const days = ['Min','Sen','Sel','Rab','Kam','Jum','Sab'];
+  return `${days[d.getDay()]} ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -114,6 +169,9 @@ async function doLogin() {
     document.getElementById('hdr-role').textContent =
       { reseller:'Reseller', own_reseller:'Own Reseller', developer:'Developer' }[SESSION.role];
 
+    // Log login
+    logActivity('login', `Login sebagai ${SESSION.role}`);
+
     renderDashboard();
     toast(`Selamat datang, ${user}! 👋`, 'success');
   } catch(e) {
@@ -152,16 +210,19 @@ function renderDashboard() {
       { id:'akun-reseller',   icon:'👤', label:'Akun Reseller' },
     ],
     developer: [
+      { id:'dev-developer',    icon:'🛠️', label:'Developer' },
       { id:'dev-own-reseller', icon:'👑', label:'Own Reseller' },
       { id:'dev-reseller',     icon:'👤', label:'Reseller' },
-      { id:'dev-developer',    icon:'🛠️', label:'Developer' },
       { id:'dev-all-panel',    icon:'🌐', label:'Semua Panel' },
       { id:'dev-all-user',     icon:'👥', label:'Semua User' },
       { id:'dev-buat-panel',   icon:'🖥️', label:'Buat Panel' },
+      { id:'dev-aktivitas',    icon:'📊', label:'Aktivitas' },
     ],
   };
 
   const items = navMap[SESSION.role] || [];
+
+  // Desktop sidebar
   const sidebar = document.getElementById('sidebar');
   sidebar.innerHTML = '<div class="sidebar-label">Menu</div>' +
     items.map(i =>
@@ -170,27 +231,45 @@ function renderDashboard() {
       </button>`
     ).join('');
 
+  // Mobile bottom nav
+  const mobileInner = document.getElementById('mobile-nav-inner');
+  if (mobileInner) {
+    mobileInner.innerHTML = items.map(i =>
+      `<button class="mobile-nav-btn" data-id="${i.id}" onclick="showSection('${i.id}',this)">
+        <span class="mn-icon">${i.icon}</span>
+        <span>${i.label}</span>
+      </button>`
+    ).join('');
+  }
+
   if (items.length) showSection(items[0].id);
 }
 
-function showSection(id, el) {
+function showSection(id, clickedEl) {
+  // Update desktop sidebar active
   document.querySelectorAll('.sidebar-item').forEach(b => b.classList.remove('active'));
-  if (el) el.classList.add('active');
-  else {
-    const btn = document.querySelector(`.sidebar-item[data-id="${id}"]`);
-    if (btn) btn.classList.add('active');
-  }
+  const sideBtn = document.querySelector(`.sidebar-item[data-id="${id}"]`);
+  if (sideBtn) sideBtn.classList.add('active');
+
+  // Update mobile nav active
+  document.querySelectorAll('.mobile-nav-btn').forEach(b => b.classList.remove('active'));
+  const mobBtn = document.querySelector(`.mobile-nav-btn[data-id="${id}"]`);
+  if (mobBtn) mobBtn.classList.add('active');
+
   const main = document.getElementById('main-content');
+  main.scrollTop = 0;
+
   const sections = {
-    'buat-panel':       () => renderBuatPanel(main, SESSION.role, SESSION.username),
-    'panel-saya':       () => renderPanelSaya(main),
-    'akun-reseller':    () => renderAkunReseller(main),
-    'dev-own-reseller': () => renderDevOwnReseller(main),
-    'dev-reseller':     () => renderDevReseller(main),
-    'dev-developer':    () => renderDevDeveloper(main),
-    'dev-all-panel':    () => renderDevAllPanel(main),
-    'dev-all-user':     () => renderDevAllUser(main),
-    'dev-buat-panel':   () => renderBuatPanel(main, 'developer', SESSION.username),
+    'buat-panel':        () => renderBuatPanel(main, SESSION.role, SESSION.username),
+    'panel-saya':        () => renderPanelSaya(main),
+    'akun-reseller':     () => renderAkunReseller(main),
+    'dev-own-reseller':  () => renderDevOwnReseller(main),
+    'dev-reseller':      () => renderDevReseller(main),
+    'dev-developer':     () => renderDevDeveloper(main),
+    'dev-all-panel':     () => renderDevAllPanel(main),
+    'dev-all-user':      () => renderDevAllUser(main),
+    'dev-buat-panel':    () => renderBuatPanel(main, 'developer', SESSION.username),
+    'dev-aktivitas':     () => renderAktivitas(main),
   };
   if (sections[id]) sections[id]();
 }
@@ -225,21 +304,27 @@ async function loadBuatPanelForm(containerId, role, owner) {
     const nests = nestsRes.data || [];
     const locs  = locsRes.data  || [];
 
+    // Build RAM dropdown 1-30 GB
+    const ramOptions = Array.from({length:30},(_,i)=>{
+      const gb = i+1;
+      const mb = gb*1024;
+      const disk = mb; // disk = same as RAM in MB (1024MB per 1GB)
+      const cpu = gb*100;
+      return `<option value="${mb}" data-disk="${disk}" data-cpu="${cpu}">${gb} GB RAM — Disk: ${mb} MB — CPU: ${cpu}%</option>`;
+    }).join('');
+
     el.innerHTML = `
       <div class="grid-2" style="margin-bottom:12px">
-        <div class="field"><label>Username Panel</label><input type="text" id="fp-user" placeholder="paneluser" /></div>
+        <div class="field"><label>Username Panel</label><input type="text" id="fp-user" placeholder="paneluser" oninput="syncPanelName(this.value)" /></div>
         <div class="field"><label>Password Panel</label><input type="password" id="fp-pass" placeholder="password" /></div>
       </div>
-      <div class="grid-2" style="margin-bottom:12px">
-        <div class="field"><label>Nama Server</label><input type="text" id="fp-name" placeholder="Nama server" /></div>
-        <div class="field"><label>Email</label><input type="email" id="fp-email" placeholder="email@domain.com" /></div>
+      <div class="field" style="margin-bottom:12px">
+        <label>Nama Server <span style="font-size:10px;color:var(--text3)">(otomatis dari username)</span></label>
+        <input type="text" id="fp-name" placeholder="auto dari username" style="opacity:.6;cursor:not-allowed" readonly />
       </div>
-      <div class="grid-3" style="margin-bottom:12px">
+      <div class="grid-2" style="margin-bottom:12px">
         <div class="field"><label>Node</label>
           <select id="fp-node">${nodes.map(n=>`<option value="${n.attributes.id}">${n.attributes.name}</option>`).join('')}</select>
-        </div>
-        <div class="field"><label>Lokasi</label>
-          <select id="fp-loc">${locs.map(l=>`<option value="${l.attributes.id}">${l.attributes.short}</option>`).join('')}</select>
         </div>
         <div class="field"><label>Nest</label>
           <select id="fp-nest" onchange="loadEggs(this.value)">
@@ -251,17 +336,39 @@ async function loadBuatPanelForm(containerId, role, owner) {
         <label>Egg</label>
         <select id="fp-egg"><option>Pilih nest dulu...</option></select>
       </div>
-      <div class="grid-3" style="margin-bottom:16px">
-        <div class="field"><label>RAM (MB)</label><input type="number" id="fp-ram" value="1024" min="128" /></div>
-        <div class="field"><label>Disk (MB)</label><input type="number" id="fp-disk" value="5120" min="512" /></div>
-        <div class="field"><label>CPU (%)</label><input type="number" id="fp-cpu" value="100" min="10" /></div>
+      <div class="field" style="margin-bottom:6px">
+        <label>Paket RAM</label>
+        <select id="fp-ram" onchange="updateResources(this)">
+          ${ramOptions}
+        </select>
       </div>
-      <button class="btn btn-primary" id="fp-btn" onclick="doCreatePanel('${role}','${owner}')">🚀 Buat Panel</button>`;
+      <div class="resource-preview" id="res-preview">
+        <span>💾 Disk: <b id="prev-disk">1024 GB</b></span>
+        <span>⚙️ CPU: <b id="prev-cpu">100%</b></span>
+      </div>
+      <button class="btn btn-primary" id="fp-btn" onclick="doCreatePanel('${role}','${owner}')" style="margin-top:16px">🚀 Buat Panel</button>`;
 
     if (nests.length) loadEggs(nests[0].attributes.id);
   } catch(e) {
     el.innerHTML = `<div class="empty-state"><div class="ei">⚠️</div><p>Gagal memuat API: ${e.message}</p></div>`;
   }
+}
+
+// Sync nama server = username panel
+function syncPanelName(val) {
+  const nameEl = document.getElementById('fp-name');
+  if (nameEl) nameEl.value = val;
+}
+
+// Update preview disk & cpu saat RAM berubah
+function updateResources(sel) {
+  const opt = sel.selectedOptions[0];
+  const diskMb = +opt.dataset.disk;
+  const cpu = opt.dataset.cpu;
+  const pd = document.getElementById('prev-disk');
+  const pc = document.getElementById('prev-cpu');
+  if (pd) pd.textContent = diskMb + ' MB';
+  if (pc) pc.textContent = cpu + '%';
 }
 
 async function loadEggs(nestId) {
@@ -285,17 +392,18 @@ async function loadEggs(nestId) {
 async function doCreatePanel(role, owner) {
   const user  = document.getElementById('fp-user').value.trim();
   const pass  = document.getElementById('fp-pass').value.trim();
-  const name  = document.getElementById('fp-name').value.trim();
-  const email = document.getElementById('fp-email').value.trim();
+  const name   = user; // nama server = username panel
+  const email  = user + '@buyer.nyzz';
   const nodeId = +document.getElementById('fp-node').value;
   const eggEl  = document.getElementById('fp-egg');
   const eggId  = +eggEl.value;
   const nestId = +document.getElementById('fp-nest').value;
-  const ram  = +document.getElementById('fp-ram').value;
-  const disk = +document.getElementById('fp-disk').value;
-  const cpu  = +document.getElementById('fp-cpu').value;
+  const ramEl  = document.getElementById('fp-ram');
+  const ram    = +ramEl.value;
+  const disk   = +ramEl.selectedOptions[0].dataset.disk;
+  const cpu    = +ramEl.selectedOptions[0].dataset.cpu;
 
-  if (!user||!pass||!name||!email) { toast('Lengkapi semua field!','error'); return; }
+  if (!user||!pass) { toast('Lengkapi Username dan Password!','error'); return; }
 
   const btn = document.getElementById('fp-btn');
   btn.innerHTML = '<span class="spinner"></span> Membuat...';
@@ -305,18 +413,15 @@ async function doCreatePanel(role, owner) {
   const startup = eggEl.selectedOptions[0]?.dataset?.startup || 'java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}';
 
   try {
-    // 1. Create Ptero user
     const userRes = await apiPtero('POST','users', {
       email, username: user, first_name: user, last_name: 'Panel', password: pass, root_admin: false,
     });
     const userId = userRes.attributes.id;
 
-    // 2. Get free allocation
     const allocRes = await apiPtero('GET', `nodes/${nodeId}/allocations`, null, { per_page: 100 });
     const free = (allocRes.data||[]).find(a => !a.attributes.assigned);
     if (!free) throw new Error('Tidak ada port tersedia di node ini!');
 
-    // 3. Create server
     const srvRes = await apiPtero('POST','servers', {
       name, user: userId, egg: eggId,
       docker_image: docker, startup,
@@ -325,15 +430,16 @@ async function doCreatePanel(role, owner) {
       feature_limits: { databases: 5, backups: 2, allocations: 1 },
       allocation: { default: free.attributes.id },
     });
-    const serverId  = srvRes.attributes.id;
+    const serverId   = srvRes.attributes.id;
     const serverUUID = srvRes.attributes.uuid;
 
-    // 4. Save to DB (GitHub JSON)
     const dbKey = role === 'own_reseller' ? 'ownpanel_resseller' : 'panel_resseller';
     const panels = await dbRead(dbKey);
     if (!panels[owner]) panels[owner] = {};
     panels[owner][name] = { username: user, email, serverId, serverUUID, name, nestId, eggId, createdAt: new Date().toISOString() };
     await dbWrite(dbKey, panels);
+
+    await logActivity('create_panel', `Panel "${name}" (user: ${user}, RAM: ${ram}MB, Disk: ${disk}MB)`);
 
     toast(`Panel "${name}" berhasil dibuat! 🎉`, 'success');
     btn.innerHTML = '🚀 Buat Panel';
@@ -395,6 +501,7 @@ async function deleteMyPanel(pname, serverId, dbKey) {
       const panels = await dbRead(dbKey);
       delete panels[SESSION.username]?.[pname];
       await dbWrite(dbKey, panels);
+      await logActivity('delete_panel', `Panel "${pname}" dihapus oleh ${SESSION.username}`);
       toast(`Panel "${pname}" dihapus!`, 'success');
       renderPanelSaya(document.getElementById('main-content'));
     } catch(e) { toast('Gagal: ' + e.message, 'error'); }
@@ -455,6 +562,7 @@ async function createReseller() {
     if (data[user]) { toast('Username sudah ada!','error'); return; }
     data[user] = { password: pass, createdBy: SESSION.username, createdAt: new Date().toISOString() };
     await dbWrite('data_resseller', data);
+    await logActivity('create_reseller', `Reseller "${user}" dibuat oleh ${SESSION.username}`);
     toast(`Reseller "${user}" dibuat!`, 'success');
     renderAkunReseller(document.getElementById('main-content'));
   } catch(e) { toast('Gagal: ' + e.message, 'error'); }
@@ -469,6 +577,7 @@ async function deleteReseller(username) {
       const panels = await dbRead('panel_resseller');
       delete panels[username];
       await dbWrite('panel_resseller', panels);
+      await logActivity('delete_reseller', `Reseller "${username}" dihapus`);
       toast(`Reseller "${username}" dihapus!`, 'success');
       renderAkunReseller(document.getElementById('main-content'));
     } catch(e) { toast('Gagal: ' + e.message, 'error'); }
@@ -522,6 +631,7 @@ async function devCreateOwnReseller() {
     if (data[user]) { toast('Username sudah ada!','error'); return; }
     data[user] = { password: pass, createdAt: new Date().toISOString() };
     await dbWrite('data_ownresseller', data);
+    await logActivity('create_own_reseller', `Own Reseller "${user}" dibuat`);
     toast(`Own Reseller "${user}" dibuat!`, 'success');
     renderDevOwnReseller(document.getElementById('main-content'));
   } catch(e) { toast('Gagal: '+e.message,'error'); }
@@ -536,6 +646,7 @@ async function devDeleteOwnReseller(username) {
       const panels = await dbRead('ownpanel_resseller');
       delete panels[username];
       await dbWrite('ownpanel_resseller', panels);
+      await logActivity('delete_own_reseller', `Own Reseller "${username}" dihapus`);
       toast(`Own Reseller "${username}" dihapus!`,'success');
       renderDevOwnReseller(document.getElementById('main-content'));
     } catch(e) { toast('Gagal: '+e.message,'error'); }
@@ -588,6 +699,7 @@ async function devCreateReseller() {
     if (data[user]) { toast('Username sudah ada!','error'); return; }
     data[user] = { password: pass, createdBy: 'developer', createdAt: new Date().toISOString() };
     await dbWrite('data_resseller', data);
+    await logActivity('create_reseller', `Reseller "${user}" dibuat oleh developer`);
     toast(`Reseller "${user}" dibuat!`,'success');
     renderDevReseller(document.getElementById('main-content'));
   } catch(e) { toast('Gagal: '+e.message,'error'); }
@@ -599,6 +711,7 @@ async function devDeleteReseller(username) {
       const data = await dbRead('data_resseller');
       delete data[username];
       await dbWrite('data_resseller', data);
+      await logActivity('delete_reseller', `Reseller "${username}" dihapus`);
       toast(`Reseller "${username}" dihapus!`,'success');
       renderDevReseller(document.getElementById('main-content'));
     } catch(e) { toast('Gagal: '+e.message,'error'); }
@@ -620,11 +733,11 @@ async function renderDevDeveloper(main) {
       </div>
       <div class="accordion-body">
         <div class="grid-2" style="margin-bottom:12px">
-          <div class="field"><label>Username</label><input type="text" id="dd-user" placeholder="username" /></div>
+          <div class="field"><label>Username</label><input type="text" id="dd-user" placeholder="username developer baru" /></div>
           <div class="field"><label>Password</label><input type="password" id="dd-pass" placeholder="password" /></div>
         </div>
         <p class="hint">⚠️ Akun admin panel akan otomatis dibuat di Pterodactyl dengan username &amp; password yang sama.</p>
-        <button class="btn btn-primary btn-sm" id="dd-btn" onclick="devCreateDeveloper()">Buat Developer</button>
+        <button class="btn btn-primary btn-sm" id="dd-btn" onclick="devCreateDeveloper()">🛠️ Buat Developer</button>
       </div>
     </div>
 
@@ -639,12 +752,16 @@ async function renderDevDeveloper(main) {
           <div class="list-item">
             <div class="li-info">
               <div class="li-avatar" style="background:linear-gradient(135deg,var(--yellow),#ff9500)">${u[0].toUpperCase()}</div>
-              <div><div class="li-name">${u}</div>
-              <div class="li-sub">Developer${d.pteroId ? ' · Ptero ID: '+d.pteroId : ''}${d.createdAt?' · '+fmtDate(d.createdAt):''}</div></div>
+              <div>
+                <div class="li-name">${u}
+                  ${u === SESSION.username ? '<span class="you-badge">KAMU</span>' : ''}
+                </div>
+                <div class="li-sub">Developer${d.pteroId ? ' · Ptero ID: '+d.pteroId : ''} · ${fmtDate(d.createdAt)}</div>
+              </div>
             </div>
             ${u !== SESSION.username
               ? `<div class="btn-circle btn-trash" onclick="devDeleteDeveloper('${u}')">🗑️</div>`
-              : `<span style="font-size:11px;color:var(--text3);padding-right:4px">Kamu</span>`}
+              : ''}
           </div>`).join('')}
       </div>
     </div>`;
@@ -658,21 +775,24 @@ async function devCreateDeveloper() {
   btn.innerHTML = '<span class="spinner"></span> Membuat...';
   btn.disabled = true;
   try {
+    // Buat admin di Pterodactyl
     const pteroRes = await apiPtero('POST', 'users', {
       email: `${user}@developer.local`,
       username: user, first_name: user, last_name: 'Dev',
       password: pass, root_admin: true,
     });
     const pteroId = pteroRes.attributes.id;
+
     const data = await dbRead('developers');
-    if (data[user]) { toast('Username sudah ada!','error'); return; }
+    if (data[user]) { toast('Username sudah ada!','error'); btn.innerHTML='🛠️ Buat Developer'; btn.disabled=false; return; }
     data[user] = { password: pass, pteroId, createdAt: new Date().toISOString() };
     await dbWrite('developers', data);
-    toast(`Developer "${user}" dibuat! Admin panel ID: ${pteroId} 🎉`,'success');
+    await logActivity('create_developer', `Developer "${user}" dibuat (Ptero ID: ${pteroId})`);
+    toast(`Developer "${user}" dibuat! Admin panel ID: ${pteroId} 🎉`, 'success');
     renderDevDeveloper(document.getElementById('main-content'));
   } catch(e) {
     toast('Gagal: '+e.message,'error');
-    btn.innerHTML = 'Buat Developer';
+    btn.innerHTML = '🛠️ Buat Developer';
     btn.disabled = false;
   }
 }
@@ -686,6 +806,7 @@ async function devDeleteDeveloper(username) {
       }
       delete data[username];
       await dbWrite('developers', data);
+      await logActivity('delete_developer', `Developer "${username}" dihapus`);
       toast(`Developer "${username}" dihapus!`,'success');
       renderDevDeveloper(document.getElementById('main-content'));
     } catch(e) { toast('Gagal: '+e.message,'error'); }
@@ -733,7 +854,7 @@ async function renderDevAllPanel(main) {
           <div class="btn-group">
             <div class="btn-circle btn-inspect" title="Lihat Stats" onclick="showStats(${a.id},'${a.name}')">🔍</div>
             <div class="btn-circle btn-suspend" title="${a.suspended?'Unsuspend':'Suspend'}"
-              onclick="toggleSuspend(${a.id},${a.suspended})">🚫</div>
+              onclick="toggleSuspend(${a.id},${a.suspended},'${a.name}')">🚫</div>
             <div class="btn-circle btn-trash" title="Hapus"
               onclick="devDeletePanel(${a.id},'${a.name}')">🗑️</div>
           </div>
@@ -745,9 +866,10 @@ async function renderDevAllPanel(main) {
   }
 }
 
-async function toggleSuspend(serverId, isSuspended) {
+async function toggleSuspend(serverId, isSuspended, name) {
   try {
     await apiPtero('POST', `servers/${serverId}/${isSuspended?'unsuspend':'suspend'}`);
+    await logActivity(isSuspended?'unsuspend_panel':'suspend_panel', `Panel "${name}" (ID: ${serverId})`);
     toast(`Server berhasil ${isSuspended?'diaktifkan':'disuspend'}!`,'success');
     renderDevAllPanel(document.getElementById('main-content'));
   } catch(e) { toast('Gagal: '+e.message,'error'); }
@@ -757,6 +879,7 @@ async function devDeletePanel(serverId, name) {
   confirmBox(`Hapus server "${name}"?`, 'Server dihapus permanen!', async () => {
     try {
       await apiPtero('DELETE', `servers/${serverId}`);
+      await logActivity('delete_panel', `Panel "${name}" (ID: ${serverId}) dihapus oleh developer`);
       toast(`Server "${name}" dihapus!`,'success');
       renderDevAllPanel(document.getElementById('main-content'));
     } catch(e) { toast('Gagal: '+e.message,'error'); }
@@ -799,10 +922,10 @@ async function showStats(serverId, serverName) {
         <div>UUID: ${a.uuid}</div>
         <div>Server ID: ${a.id}</div>
         <div>Egg ID: ${a.egg}</div>
-        <div>Swap: ${a.limits.swap} MB · IO: ${a.limits.io}</div>
+        <div>Swap: ${a.limits.swap}MB · IO: ${a.limits.io}</div>
       </div>
       <p class="hint" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-        ℹ️ Stats real-time (CPU/RAM aktual) membutuhkan Client API Key dari akun pemilik server.
+        ℹ️ Stats real-time membutuhkan Client API Key dari akun pemilik server.
       </p>`;
   } catch(e) {
     document.getElementById('stats-content').innerHTML =
@@ -864,8 +987,87 @@ async function devDeleteUser(userId, username) {
   confirmBox(`Hapus user "${username}"?`, 'User dihapus dari Pterodactyl.', async () => {
     try {
       await apiPtero('DELETE', `users/${userId}`);
+      await logActivity('delete_user', `User "${username}" (ID: ${userId}) dihapus`);
       toast(`User "${username}" dihapus!`,'success');
       renderDevAllUser(document.getElementById('main-content'));
+    } catch(e) { toast('Gagal: '+e.message,'error'); }
+  });
+}
+
+// ──────────────────────────────────────────────────────────────
+// SECTION: DEVELOPER — AKTIVITAS
+// ──────────────────────────────────────────────────────────────
+async function renderAktivitas(main) {
+  main.innerHTML = `
+    <div class="page-header">
+      <h2>📊 Aktivitas</h2>
+      <p>Log semua aktivitas buyer & developer</p>
+    </div>
+    <div class="accordion open">
+      <div class="accordion-header" onclick="toggleAcc(this)">
+        <div class="accordion-title">
+          <div class="accordion-icon icon-blue">📋</div>
+          <span>Log Aktivitas</span>
+        </div>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="accordion-body" id="act-list">
+        <div class="empty-state"><div class="spinner"></div><p>Memuat log...</p></div>
+      </div>
+    </div>`;
+
+  try {
+    const logs = await dbRead('activity_log');
+    const arr = Array.isArray(logs) ? logs : [];
+    const el = document.getElementById('act-list');
+
+    if (!arr.length) {
+      el.innerHTML = '<div class="empty-state"><div class="ei">📭</div><p>Belum ada aktivitas.</p></div>';
+      return;
+    }
+
+    // Group by date
+    const grouped = {};
+    arr.forEach(log => {
+      const dateKey = new Date(log.ts).toLocaleDateString('id-ID', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+      if (!grouped[dateKey]) grouped[dateKey] = [];
+      grouped[dateKey].push(log);
+    });
+
+    el.innerHTML = `
+      <div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:12px;color:var(--text3)">Total: ${arr.length} aktivitas</span>
+        <button class="btn btn-ghost btn-sm" onclick="clearLogs()">🗑️ Hapus Semua Log</button>
+      </div>
+      ${Object.entries(grouped).map(([date, items]) => `
+        <div class="log-date-group">
+          <div class="log-date-label">${date}</div>
+          ${items.map(log => `
+            <div class="log-item">
+              <div class="log-icon">${ACTION_ICONS[log.action] || '📌'}</div>
+              <div class="log-body">
+                <div class="log-action">${ACTION_LABELS[log.action] || log.action}</div>
+                <div class="log-detail">${log.detail}</div>
+                <div class="log-meta">
+                  <span class="log-actor">@${log.actor}</span>
+                  <span class="log-role-badge log-role-${log.role}">${log.role}</span>
+                  <span class="log-time">${fmtTs(log.ts)}</span>
+                </div>
+              </div>
+            </div>`).join('')}
+        </div>`).join('')}`;
+  } catch(e) {
+    document.getElementById('act-list').innerHTML =
+      `<div class="empty-state"><div class="ei">⚠️</div><p>Gagal: ${e.message}</p></div>`;
+  }
+}
+
+async function clearLogs() {
+  confirmBox('Hapus semua log?', 'Log aktivitas akan dikosongkan.', async () => {
+    try {
+      await dbWrite('activity_log', []);
+      toast('Log aktivitas dikosongkan!', 'success');
+      renderAktivitas(document.getElementById('main-content'));
     } catch(e) { toast('Gagal: '+e.message,'error'); }
   });
 }
@@ -897,6 +1099,14 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' });
 }
 
+function fmtTs(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2,'0');
+  const days = ['Min','Sen','Sel','Rab','Kam','Jum','Sab'];
+  return `${days[d.getDay()]} ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 function toast(msg, type = 'info') {
   const c = document.getElementById('toast-container');
   const el = document.createElement('div');
@@ -924,7 +1134,6 @@ function confirmBox(title, msg, cb) {
 function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
 function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 
-// Close on overlay click
 document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', e => { if (e.target === m) m.classList.add('hidden'); });
 });
