@@ -1,5 +1,12 @@
 [
   {
+    "action": "login",
+    "detail": "Login sebagai developer",
+    "actor": "deno",
+    "role": "developer",
+    "ts": "2026-03-22T00:39:54.213Z"
+  },
+  {
     "action": "create_developer",
     "detail": "Developer \"deno\" dibuat (Ptero ID: 8)",
     "actor": "admin",
