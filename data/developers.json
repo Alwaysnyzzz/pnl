@@ -3,5 +3,10 @@
     "password": "admin123",
     "pteroId": null,
     "createdAt": "2025-01-01T00:00:00.000Z"
+  },
+  "deno": {
+    "password": "1234567",
+    "pteroId": 8,
+    "createdAt": "2026-03-22T00:39:10.515Z"
   }
 }
