@@ -1,1 +1,14 @@
-{}
+{
+  "ressfree": {
+    "Tes": {
+      "username": "Tes",
+      "email": "Tes@buyer.nyzz",
+      "serverId": 6,
+      "serverUUID": "1fb9a42a-85cb-428a-945a-63a4577270b3",
+      "name": "Tes",
+      "nestId": 5,
+      "eggId": 15,
+      "createdAt": "2026-03-22T02:34:51.600Z"
+    }
+  }
+}
