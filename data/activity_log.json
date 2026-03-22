@@ -1,5 +1,12 @@
 [
   {
+    "action": "login",
+    "detail": "Login sebagai reseller",
+    "actor": "ressfree",
+    "role": "reseller",
+    "ts": "2026-03-22T02:28:54.502Z"
+  },
+  {
     "action": "create_reseller",
     "detail": "Reseller \"ressfree\" dibuat oleh developer",
     "actor": "admin",
