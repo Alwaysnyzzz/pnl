@@ -2,6 +2,13 @@
   {
     "action": "login",
     "detail": "Login sebagai developer",
+    "actor": "admin",
+    "role": "developer",
+    "ts": "2026-03-22T00:40:23.779Z"
+  },
+  {
+    "action": "login",
+    "detail": "Login sebagai developer",
     "actor": "deno",
     "role": "developer",
     "ts": "2026-03-22T00:39:54.213Z"
