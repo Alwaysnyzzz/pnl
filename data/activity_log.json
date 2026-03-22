@@ -1,5 +1,12 @@
 [
   {
+    "action": "delete_own_reseller",
+    "detail": "Own Reseller \"ganz\" dihapus",
+    "actor": "admin",
+    "role": "developer",
+    "ts": "2026-03-22T02:27:32.518Z"
+  },
+  {
     "action": "login",
     "detail": "Login sebagai developer",
     "actor": "admin",
