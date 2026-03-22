@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "action": "login",
+    "detail": "Login sebagai developer",
+    "actor": "admin",
+    "role": "developer",
+    "ts": "2026-03-22T00:23:47.475Z"
+  }
+]
