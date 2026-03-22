@@ -1,5 +1,12 @@
 [
   {
+    "action": "create_own_reseller",
+    "detail": "Own Reseller \"ressfree\" dibuat",
+    "actor": "admin",
+    "role": "developer",
+    "ts": "2026-03-22T02:27:47.782Z"
+  },
+  {
     "action": "delete_own_reseller",
     "detail": "Own Reseller \"ganz\" dihapus",
     "actor": "admin",
