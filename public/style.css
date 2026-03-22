@@ -230,3 +230,77 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
   font-size: 12px; color: var(--text2);
 }
 .resource-preview b { color: var(--accent); font-family: 'Space Mono', monospace; }
+
+/* ── SISTEM API ── */
+.api-doc { font-size: 12px; }
+.api-doc-base, .api-doc-auth {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; background: var(--bg4);
+  border: 1px solid var(--border); border-radius: var(--r);
+  margin-bottom: 8px; flex-wrap: wrap;
+}
+.api-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; color: var(--text3); flex-shrink: 0;
+}
+.api-doc-base code, .api-doc-auth code {
+  font-family: 'Space Mono', monospace; font-size: 11px;
+  color: var(--green); flex: 1; word-break: break-all;
+}
+.btn-copy {
+  padding: 4px 10px; border-radius: 6px;
+  background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text2); font-size: 11px; cursor: pointer;
+  transition: all .15s; flex-shrink: 0;
+}
+.btn-copy:hover { border-color: var(--accent); color: var(--accent); }
+.api-divider {
+  font-size: 10px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; color: var(--text3);
+  border-top: 1px solid var(--border);
+  padding-top: 12px; margin: 14px 0 10px;
+}
+.api-endpoint {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 4px;
+}
+.api-method {
+  font-size: 10px; font-weight: 800; letter-spacing: .5px;
+  padding: 3px 8px; border-radius: 5px; flex-shrink: 0;
+}
+.api-method.post { background: rgba(61,220,132,.15); color: var(--green); }
+.api-method.get  { background: rgba(91,138,255,.15); color: var(--accent); }
+.api-method.delete { background: rgba(255,79,79,.15); color: var(--red); }
+.api-path {
+  font-family: 'Space Mono', monospace; font-size: 11px;
+  color: var(--text); word-break: break-all;
+}
+.api-body {
+  background: var(--bg4); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 10px 12px; margin-top: 4px;
+}
+.api-body pre {
+  font-family: 'Space Mono', monospace; font-size: 11px;
+  color: var(--yellow); white-space: pre-wrap; word-break: break-all;
+}
+
+/* API Key reveal box */
+.api-key-reveal {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; background: var(--bg4);
+  border: 1px solid var(--accent); border-radius: var(--r);
+  flex-wrap: wrap;
+}
+.api-key-reveal code {
+  font-family: 'Space Mono', monospace; font-size: 12px;
+  color: var(--green); flex: 1; word-break: break-all;
+}
+.api-key-display {
+  padding: 8px 12px; background: var(--bg4);
+  border: 1px solid var(--border); border-radius: 0 0 var(--r) var(--r);
+  margin-top: -7px; margin-bottom: 8px;
+}
+.api-key-display code {
+  font-family: 'Space Mono', monospace; font-size: 11px;
+  color: var(--green); word-break: break-all;
+}

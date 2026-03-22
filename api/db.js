@@ -13,6 +13,7 @@ const FILES = {
   panel_resseller:    "data/panel_resseller.json",
   ownpanel_resseller: "data/ownpanel_resseller.json",
   activity_log:       "data/activity_log.json",
+  api_keys:           "data/api_keys.json",
 };
 
 const DEFAULTS = {
@@ -22,6 +23,7 @@ const DEFAULTS = {
   panel_resseller:    {},
   ownpanel_resseller: {},
   activity_log:       [],
+  api_keys:           {},
 };
 
 async function ghGet(path) {

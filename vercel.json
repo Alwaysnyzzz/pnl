@@ -3,6 +3,7 @@
   "routes": [
     { "src": "/api/ptero(.*)", "dest": "/api/ptero.js" },
     { "src": "/api/db(.*)", "dest": "/api/db.js" },
+    { "src": "/api/panel(.*)", "dest": "/api/panel.js" },
     { "src": "/(.*)", "dest": "/public/$1" }
   ]
 }

@@ -217,6 +217,7 @@ function renderDashboard() {
       { id:'dev-all-user',     icon:'👥', label:'Semua User' },
       { id:'dev-buat-panel',   icon:'🖥️', label:'Buat Panel' },
       { id:'dev-aktivitas',    icon:'📊', label:'Aktivitas' },
+      { id:'dev-api',           icon:'🔑', label:'Sistem API' },
     ],
   };
 
@@ -270,6 +271,7 @@ function showSection(id, clickedEl) {
     'dev-all-user':      () => renderDevAllUser(main),
     'dev-buat-panel':    () => renderBuatPanel(main, 'developer', SESSION.username),
     'dev-aktivitas':     () => renderAktivitas(main),
+    'dev-api':           () => renderSistemAPI(main),
   };
   if (sections[id]) sections[id]();
 }
@@ -1075,6 +1077,249 @@ async function clearLogs() {
       renderAktivitas(document.getElementById('main-content'));
     } catch(e) { toast('Gagal: '+e.message,'error'); }
   });
+}
+
+// ──────────────────────────────────────────────────────────────
+// SECTION: DEVELOPER — SISTEM API
+// ──────────────────────────────────────────────────────────────
+async function renderSistemAPI(main) {
+  main.innerHTML = `
+    <div class="page-header">
+      <h2>🔑 Sistem API</h2>
+      <p>Kelola API Key untuk akses programatik</p>
+    </div>
+
+    <div class="accordion open">
+      <div class="accordion-header" onclick="toggleAcc(this)">
+        <div class="accordion-title"><div class="accordion-icon icon-yellow">➕</div><span>Buat API Key Baru</span></div>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="accordion-body">
+        <div class="field">
+          <label>Label / Nama Key</label>
+          <input type="text" id="ak-label" placeholder="contoh: Bot Telegram, Website Toko..." />
+        </div>
+        <button class="btn btn-primary btn-sm" id="ak-btn" onclick="createAPIKey()">🔑 Generate API Key</button>
+      </div>
+    </div>
+
+    <div class="accordion open" style="margin-top:10px">
+      <div class="accordion-header" onclick="toggleAcc(this)">
+        <div class="accordion-title"><div class="accordion-icon icon-blue">📋</div><span>API Key Saya</span></div>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="accordion-body" id="ak-list">
+        <div class="empty-state"><div class="spinner"></div><p>Memuat...</p></div>
+      </div>
+    </div>
+
+    <div class="accordion" style="margin-top:10px">
+      <div class="accordion-header" onclick="toggleAcc(this)">
+        <div class="accordion-title"><div class="accordion-icon icon-green">📖</div><span>Dokumentasi API</span></div>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="accordion-body">
+        <div class="api-doc">
+          <div class="api-doc-base">
+            <span class="api-label">Base URL</span>
+            <code id="api-base-url">https://your-domain.vercel.app/api/panel</code>
+            <button class="btn-copy" onclick="copyText('api-base-url')">📋</button>
+          </div>
+          <div class="api-doc-auth">
+            <span class="api-label">Auth Header</span>
+            <code>X-API-Key: dev_xxxxxxxxxxxxxxxx</code>
+          </div>
+
+          <div class="api-divider">Endpoints</div>
+
+          <div class="api-endpoint">
+            <div class="api-method post">POST</div>
+            <div class="api-path">/api/panel?action=create_reseller</div>
+          </div>
+          <div class="api-body">
+            <pre>{ "username": "john", "password": "pass123" }</pre>
+          </div>
+
+          <div class="api-endpoint" style="margin-top:10px">
+            <div class="api-method post">POST</div>
+            <div class="api-path">/api/panel?action=create_own_reseller</div>
+          </div>
+          <div class="api-body">
+            <pre>{ "username": "john", "password": "pass123" }</pre>
+          </div>
+
+          <div class="api-endpoint" style="margin-top:10px">
+            <div class="api-method get">GET</div>
+            <div class="api-path">/api/panel?action=list_reseller</div>
+          </div>
+
+          <div class="api-endpoint" style="margin-top:10px">
+            <div class="api-method get">GET</div>
+            <div class="api-path">/api/panel?action=list_own_reseller</div>
+          </div>
+
+          <div class="api-endpoint" style="margin-top:10px">
+            <div class="api-method delete">DELETE</div>
+            <div class="api-path">/api/panel?action=delete_reseller</div>
+          </div>
+          <div class="api-body">
+            <pre>{ "username": "john" }</pre>
+          </div>
+
+          <div class="api-endpoint" style="margin-top:10px">
+            <div class="api-method delete">DELETE</div>
+            <div class="api-path">/api/panel?action=delete_own_reseller</div>
+          </div>
+          <div class="api-body">
+            <pre>{ "username": "john" }</pre>
+          </div>
+
+          <div class="api-divider">Contoh cURL</div>
+          <div class="api-body">
+            <pre id="curl-example">curl -X POST "https://your-domain.vercel.app/api/panel?action=create_reseller" \
+  -H "X-API-Key: dev_xxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"john","password":"pass123"}'</pre>
+            <button class="btn-copy" onclick="copyText('curl-example')" style="margin-top:6px">📋 Copy</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  // Set base URL otomatis
+  document.getElementById('api-base-url').textContent = window.location.origin + '/api/panel';
+  document.getElementById('curl-example').textContent =
+    `curl -X POST "${window.location.origin}/api/panel?action=create_reseller" \\
+  -H "X-API-Key: dev_xxxxxxxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{"username":"john","password":"pass123"}'`;
+
+  loadAPIKeys();
+}
+
+async function loadAPIKeys() {
+  const el = document.getElementById('ak-list');
+  if (!el) return;
+  try {
+    const res = await fetch('/api/panel?action=list_keys', {
+      headers: {
+        'X-Dev-User': SESSION.username,
+        'X-Dev-Pass': SESSION.userData.password,
+      }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    if (!data.keys.length) {
+      el.innerHTML = '<div class="empty-state"><div class="ei">🔑</div><p>Belum ada API key. Generate dulu!</p></div>';
+      return;
+    }
+
+    el.innerHTML = data.keys.map(k => `
+      <div class="list-item">
+        <div class="li-info">
+          <div class="li-avatar icon-yellow" style="background:rgba(255,192,69,.15);color:var(--yellow)">🔑</div>
+          <div>
+            <div class="li-name">${k.label}</div>
+            <div class="li-sub">Dipakai: ${k.usageCount}x · ${fmtDate(k.createdAt)}</div>
+          </div>
+        </div>
+        <div class="btn-group">
+          <div class="btn-circle btn-inspect" title="Copy Key" onclick="copyAPIKey('${k.key}')">📋</div>
+          <div class="btn-circle btn-trash" title="Hapus" onclick="deleteAPIKey('${k.key}', '${k.label}')">🗑️</div>
+        </div>
+      </div>
+      <div class="api-key-display" id="key-display-${k.key.slice(-6)}" style="display:none">
+        <code>${k.key}</code>
+      </div>`).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="empty-state"><div class="ei">⚠️</div><p>${e.message}</p></div>`;
+  }
+}
+
+async function createAPIKey() {
+  const label = document.getElementById('ak-label').value.trim() || 'API Key';
+  const btn = document.getElementById('ak-btn');
+  btn.innerHTML = '<span class="spinner"></span>';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/panel?action=create_key', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Dev-User': SESSION.username,
+        'X-Dev-Pass': SESSION.userData.password,
+      },
+      body: JSON.stringify({ label })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    // Show key in modal
+    showKeyModal(data.key, label);
+    document.getElementById('ak-label').value = '';
+    loadAPIKeys();
+  } catch(e) {
+    toast('Gagal: ' + e.message, 'error');
+  } finally {
+    btn.innerHTML = '🔑 Generate API Key';
+    btn.disabled = false;
+  }
+}
+
+function showKeyModal(key, label) {
+  // Create temporary modal
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box" style="max-width:420px">
+      <div class="modal-header">
+        <h3>🎉 API Key Berhasil Dibuat</h3>
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+      </div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:12px">Label: <b>${label}</b></p>
+      <div class="api-key-reveal">
+        <code id="new-key-val">${key}</code>
+        <button class="btn btn-primary btn-sm" onclick="copyText('new-key-val');toast('Key di-copy!','success')">📋 Copy</button>
+      </div>
+      <p style="font-size:11px;color:var(--red);margin-top:12px">
+        ⚠️ Simpan key ini sekarang! Key hanya ditampilkan sekali.
+      </p>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+function copyAPIKey(key) {
+  navigator.clipboard.writeText(key).then(() => toast('API Key di-copy!', 'success'));
+}
+
+async function deleteAPIKey(key, label) {
+  confirmBox(`Hapus API Key "${label}"?`, 'Key yang sudah dipakai tidak bisa digunakan lagi.', async () => {
+    try {
+      const res = await fetch('/api/panel?action=delete_key', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dev-User': SESSION.username,
+          'X-Dev-Pass': SESSION.userData.password,
+        },
+        body: JSON.stringify({ key })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast('API Key dihapus!', 'success');
+      loadAPIKeys();
+    } catch(e) { toast('Gagal: ' + e.message, 'error'); }
+  });
+}
+
+function copyText(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent)
+    .then(() => toast('Disalin!', 'success'))
+    .catch(() => toast('Gagal copy', 'error'));
 }
 
 // ──────────────────────────────────────────────────────────────
