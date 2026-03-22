@@ -1,5 +1,12 @@
 [
   {
+    "action": "create_panel",
+    "detail": "Panel \"Tes\" (user: Tes, RAM: 0MB, Disk: 0MB)",
+    "actor": "ressfree",
+    "role": "reseller",
+    "ts": "2026-03-22T02:34:52.713Z"
+  },
+  {
     "action": "login",
     "detail": "Login sebagai reseller",
     "actor": "ressfree",
