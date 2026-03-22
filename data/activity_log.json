@@ -1,5 +1,12 @@
 [
   {
+    "action": "login",
+    "detail": "Login sebagai developer",
+    "actor": "admin",
+    "role": "developer",
+    "ts": "2026-03-22T02:28:08.327Z"
+  },
+  {
     "action": "create_own_reseller",
     "detail": "Own Reseller \"ressfree\" dibuat",
     "actor": "admin",
