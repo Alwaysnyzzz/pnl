@@ -1,6 +1,13 @@
 [
   {
     "action": "login",
+    "detail": "Login sebagai developer",
+    "actor": "admin",
+    "role": "developer",
+    "ts": "2026-03-22T02:31:30.610Z"
+  },
+  {
+    "action": "login",
     "detail": "Login sebagai reseller",
     "actor": "ressfree",
     "role": "reseller",
